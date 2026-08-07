@@ -1,0 +1,18 @@
+import fs from "node:fs";
+import assert from "node:assert/strict";
+const manifest = JSON.parse(fs.readFileSync(".output/chrome-mv3/manifest.json", "utf8"));
+assert.equal(manifest.manifest_version, 3);
+assert(manifest.permissions.includes("storage"));
+assert.equal(manifest.version, "0.1.0");
+assert(manifest.optional_host_permissions.includes("https://*/*"));
+assert(manifest.options_page || manifest.options_ui?.page);
+assert.equal(manifest.background?.service_worker, "background.js");
+const scripts = manifest.content_scripts;
+const kaggle = scripts.find(s => s.matches.includes("https://www.kaggle.com/code/*"));
+const jupyter = scripts.filter(s => s.matches.includes("https://*.jupyter-proxy.kaggle.net/*"));
+assert(kaggle && jupyter.length === 2);
+assert(jupyter.every(s => s.all_frames === true));
+assert(jupyter.some(s => s.world === "MAIN") && jupyter.some(s => !s.world || s.world === "ISOLATED"));
+for (const host of ["https://hackatime.hackclub.com/*", "https://api.wakatime.com/*"]) assert(manifest.host_permissions.includes(host));
+assert(fs.readdirSync(".output/chrome-mv3/assets").some(file => file.startsWith("spline-sans-") && file.endsWith(".woff2")));
+console.log("Manifest OK: MV3, Kaggle outer script, MAIN and isolated all-frame Jupyter scripts, storage, endpoint hosts and options page");

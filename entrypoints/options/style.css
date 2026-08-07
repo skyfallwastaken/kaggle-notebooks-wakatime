@@ -1,0 +1,10 @@
+:root { font-family: "Spline Sans Variable", sans-serif; color: #f8f8f2; background: #282a36; color-scheme: dark; }
+body { margin: 0; }
+main { width: min(32rem, calc(100% - 3rem)); margin: 4rem auto; border: 1px solid #6272a4; padding: 2rem; }
+h1 { color: #bd93f9; margin-top: 0; }
+form { display: grid; gap: .75rem; }
+label { color: #8be9fd; font-weight: 650; }
+input, button { border: 1px solid #6272a4; border-radius: 0; background: #44475a; color: #f8f8f2; font: inherit; padding: .7rem; background-image: none; }
+button { background: #50fa7b; color: #282a36; cursor: pointer; font-weight: 700; margin-top: .5rem; }
+input:focus, button:focus-visible { outline: 3px solid #ff79c6; outline-offset: 2px; }
+#status { min-height: 1.5em; color: #50fa7b; margin-bottom: 0; }

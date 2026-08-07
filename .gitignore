@@ -1,0 +1,11 @@
+node_modules/
+.output/
+.wxt/
+.env
+.vitest-attachments/
+tests/__screenshots__/
+coverage/
+dist/
+test-results/
+playwright-report/
+*.log

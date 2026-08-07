@@ -1,0 +1,25 @@
+{
+  "name": "kaggle-notebooks-wakatime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "postinstall": "bunx --bun wxt prepare",
+    "dev": "bunx --bun wxt",
+    "build": "bunx --bun wxt build",
+    "typecheck": "tsc --noEmit",
+    "test": "bun run build && bunx --bun vitest run",
+    "check:manifest": "node scripts/assert-manifest.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/spline-sans": "5.3.0",
+    "wxt": "0.21.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.58.2",
+    "@types/node": "24.2.0",
+    "@vitest/browser-playwright": "4.1.10",
+    "typescript": "5.9.2",
+    "vitest": "4.1.10"
+  }
+}
