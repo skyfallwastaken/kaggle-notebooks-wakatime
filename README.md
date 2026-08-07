@@ -25,3 +25,9 @@ Tests always load the built extension against a real Kaggle notebook. Put the te
 `bun run test` builds the extension, starts Vitest Browser Mode in headless Chromium then opens real Kaggle. The test appends three marked lines to the sole cell, verifies notebook-wide positions, edit measurements, dependencies and save behaviour then restores the exact source and verifies it again after a reload. It fails instead of skipping when the cookie is missing or Kaggle cannot be reached. Chromium routes Hackatime and WakaTime API hosts to a local HTTPS capture server so test heartbeats cannot reach either service.
 
 Run `bun run typecheck` and `bun run check:manifest` for the remaining checks.
+
+## Releases
+
+GitHub Actions runs the full real Kaggle suite on pushes to `main`, version tags and manual dispatches. The repository must provide the `KAGGLE` Actions secret. Fork pull requests are intentionally excluded so untrusted code cannot access the Kaggle cookie.
+
+Push a tag matching the package version, such as `v0.1.0`, to publish a GitHub Release after the tests pass. Each release contains a Chrome Web Store ZIP, a CRX and SHA-256 checksums. Upload the ZIP to Chrome Web Store. The optional `CRX_PRIVATE_KEY` Actions secret can contain a PEM private key when stable CRX extension IDs are required. Without it, Chromium generates a new signing key for each release and the private key is discarded.

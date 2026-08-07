@@ -12,7 +12,7 @@ describe("heartbeat and contents boundaries", () => {
       language: "Python", dependencies: ["numpy"], lines: 2, lineno: 1,
       cursorpos: 2, is_write: true, project_root_count: 0,
       editor: "Kaggle Notebooks", operating_system: navigator.platform || "Unknown",
-      machine: "machine", user_agent: navigator.userAgent,
+      machine: "machine", user_agent: `kaggle-wakatime/0.1.0 ${navigator.userAgent}`,
       plugin: "kaggle-notebooks-wakatime/0.1.0", line_additions: 1,
       line_deletions: 0, human_line_changes: 1,
     });

@@ -7,6 +7,7 @@
     "postinstall": "bunx --bun wxt prepare",
     "dev": "bunx --bun wxt",
     "build": "bunx --bun wxt build",
+    "zip": "bunx --bun wxt zip",
     "typecheck": "tsc --noEmit",
     "test": "bun run build && bunx --bun vitest run",
     "check:manifest": "node scripts/assert-manifest.mjs"

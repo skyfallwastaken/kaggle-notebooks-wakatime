@@ -18,7 +18,7 @@ export function createPayload(meta: NotebookMetadata, activity: Activity, machin
     editor: "Kaggle Notebooks",
     operating_system: navigator.platform || "Unknown",
     machine,
-    user_agent: navigator.userAgent,
+    user_agent: `kaggle-wakatime/0.1.0 ${navigator.userAgent}`,
     plugin: "kaggle-notebooks-wakatime/0.1.0",
     line_additions: activity.lineAdditions,
     line_deletions: activity.lineDeletions,
