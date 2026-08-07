@@ -2,9 +2,9 @@ import { defineConfig } from "wxt";
 
 export default defineConfig({
   manifest: {
-    name: "Kaggle Notebooks WakaTime",
+    name: "Hackatime for Kaggle Notebooks",
     description: "Send privacy-conscious Kaggle notebook coding heartbeats.",
-    version: "0.1.0",
+    version: "0.1.1",
     permissions: ["storage"],
     host_permissions: [
       "https://www.kaggle.com/code/*",
