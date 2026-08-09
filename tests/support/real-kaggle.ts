@@ -413,7 +413,7 @@ export function createRealKaggleCommand(options: CommandOptions): BrowserCommand
       const expectedDependencies = [...new Set([...initial.dependencies, "pandas"])].sort();
       requireCondition(edit.entity === identity.entity, "Real Kaggle edit heartbeat used the wrong entity");
       requireCondition(JSON.stringify(edit.dependencies) === JSON.stringify(expectedDependencies), "Real Kaggle edit heartbeat dependencies were incorrect");
-      requireCondition(edit.user_agent.startsWith("kaggle-wakatime/0.1.1 "), "Real Kaggle heartbeat used the wrong user agent prefix");
+      requireCondition(edit.user_agent.startsWith("kaggle-wakatime/0.1.2 "), "Real Kaggle heartbeat used the wrong user agent prefix");
 
       result = {
         fields: Object.keys(edit).sort(),

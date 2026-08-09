@@ -4,7 +4,7 @@ export default defineConfig({
   manifest: {
     name: "Hackatime for Kaggle Notebooks",
     description: "Send privacy-conscious Kaggle notebook coding heartbeats.",
-    version: "0.1.1",
+    version: "0.1.2",
     permissions: ["storage"],
     host_permissions: [
       "https://www.kaggle.com/code/*",

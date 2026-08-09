@@ -8,3 +8,4 @@ input, button { border: 1px solid #6272a4; border-radius: 0; background: #44475a
 button { background: #50fa7b; color: #282a36; cursor: pointer; font-weight: 700; margin-top: .5rem; }
 input:focus, button:focus-visible { outline: 3px solid #ff79c6; outline-offset: 2px; }
 #status { min-height: 1.5em; color: #50fa7b; margin-bottom: 0; }
+@media (max-height: 36rem) { main { margin: 1.5rem auto; padding: 1.5rem; } }

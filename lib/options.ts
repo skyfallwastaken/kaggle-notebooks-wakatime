@@ -7,7 +7,7 @@ export interface OptionsAdapter {
 }
 
 export const OPTIONS_MARKUP = `
-  <h1>Kaggle WakaTime</h1>
+  <h1>Hackatime for Kaggle Notebooks</h1>
   <form>
     <label for="api-key">API key</label>
     <input id="api-key" name="apiKey" type="password" autocomplete="off" required>

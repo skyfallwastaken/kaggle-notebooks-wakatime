@@ -23,7 +23,7 @@ export default defineBackground(() => {
         getLast: async entity => Number((await session?.get(`last:${entity}`))?.[`last:${entity}`] ?? (await local.get(`last:${entity}`))[`last:${entity}`] ?? 0),
         setLast: async (entity, time) => { const item = { [`last:${entity}`]: time }; await session?.set(item); await local.set(item); },
       });
-    } catch { console.warn("Kaggle WakaTime heartbeat request failed"); }
+    } catch { console.warn("Hackatime for Kaggle Notebooks heartbeat request failed"); }
   });
   browser.runtime.onMessage.addListener(handler);
 });

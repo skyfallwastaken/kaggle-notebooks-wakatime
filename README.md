@@ -1,4 +1,4 @@
-# Kaggle Notebooks WakaTime
+# Hackatime for Kaggle Notebooks
 
 A browser extension that records coding activity from Kaggle Notebooks and sends WakaTime compatible heartbeats to Hackatime.
 
@@ -16,6 +16,8 @@ The API endpoint defaults to Hackatime. A compatible HTTPS WakaTime endpoint can
 
 The extension sends the stable notebook path, project, language, imported package names, cursor location, line totals and measured edit counts. Notebook source and the API key are never included in heartbeat JSON. The key remains in extension local storage. A random machine identifier is generated locally. Activity is throttled per notebook for 120 seconds. Only an explicit save bypasses throttling.
 
+Read the full [privacy policy](PRIVACY.md).
+
 The preferred source is the live JupyterLab notebook model. If Kaggle does not expose that model, the bridge attempts the same origin Jupyter Contents API. Its final fallback reads visible cells from the page. Since JupyterLab virtualises cells, this final mode can report only a partial notebook. Kaggle interface or Jupyter API changes may require an extension update.
 
 ## Development
@@ -30,4 +32,4 @@ Run `bun run typecheck` and `bun run check:manifest` for the remaining checks.
 
 GitHub Actions runs the full real Kaggle suite on pushes to `main`, version tags and manual dispatches. The repository must provide the `KAGGLE` Actions secret. Fork pull requests are intentionally excluded so untrusted code cannot access the Kaggle cookie.
 
-Push a tag matching the package version, such as `v1.2.3`, to publish a GitHub Release after the tests pass. Each release contains a Chrome Web Store ZIP, a CRX and SHA-256 checksums. Upload the ZIP to Chrome Web Store. The optional `CRX_PRIVATE_KEY` Actions secret can contain a PEM private key when stable CRX extension IDs are required. Without it, Chromium generates a new signing key for each release and the private key is discarded.
+Push a tag matching the package version, such as `v1.2.3`, to publish a GitHub Release after the tests pass. Each release contains a Chrome Web Store ZIP, a CRX, a store submission pack and SHA-256 checksums. Upload the Chrome ZIP to Chrome Web Store and use the submission pack for its listing and privacy fields. The optional `CRX_PRIVATE_KEY` Actions secret can contain a PEM private key when stable CRX extension IDs are required. Without it, Chromium generates a new signing key for each release and the private key is discarded.
