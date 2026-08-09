@@ -1,5 +1,6 @@
 {
   "extends": "./.wxt/tsconfig.json",
   "compilerOptions": { "strict": true, "noUncheckedIndexedAccess": true },
-  "include": ["**/*.ts", "**/*.d.ts", ".wxt/wxt.d.ts"]
+  "include": ["**/*.ts", "**/*.d.ts", ".wxt/wxt.d.ts"],
+  "exclude": [".hackatime/**"]
 }

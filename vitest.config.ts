@@ -37,6 +37,9 @@ export default defineConfig(({ mode }) => {
           realKaggle: createRealKaggleCommand({
             cookie: env.KAGGLE,
             notebookUrl: env.KAGGLE_NOTEBOOK_URL || defaultNotebookUrl,
+            hackatimeUrl: env.HACKATIME_TEST_URL,
+            apiKey: env.HACKATIME_TEST_API_KEY || "real-kaggle-browser-test-key",
+            requireHackatime: env.CI === "true",
           }),
         },
         headless: true,

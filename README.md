@@ -24,7 +24,9 @@ The preferred source is the live JupyterLab notebook model. If Kaggle does not e
 
 Tests always load the built extension against a real Kaggle notebook. Put the testing account's cookie header in `.env` as `KAGGLE`. The default notebook is a dedicated disposable draft. Set `KAGGLE_NOTEBOOK_URL` to use another dedicated one-cell draft.
 
-`bun run test` builds the extension, starts Vitest Browser Mode in headless Chromium then opens real Kaggle. The test appends three marked lines to the sole cell, verifies notebook-wide positions, edit measurements, dependencies and save behaviour then restores the exact source and verifies it again after a reload. It fails instead of skipping when the cookie is missing or Kaggle cannot be reached. Chromium routes Hackatime and WakaTime API hosts to a local HTTPS capture server so test heartbeats cannot reach either service.
+`bun run test` builds the extension, starts Vitest Browser Mode in headless Chromium then opens real Kaggle. The test appends three marked lines to the sole cell, verifies notebook-wide positions, edit measurements, dependencies and save behaviour then restores the exact source and verifies it again after a reload. It fails instead of skipping when the cookie is missing or Kaggle cannot be reached. Chromium routes Hackatime and WakaTime API hosts to a local HTTPS proxy so test heartbeats cannot reach either public service.
+
+CI starts a local Hackatime Rails server with PostgreSQL. The HTTPS proxy forwards extension requests to it, then the suite reads the heartbeat back through Hackatime's API and compares every persisted field. To run the same integration locally, set `HACKATIME_TEST_URL` to a local Hackatime origin and `HACKATIME_TEST_API_KEY` to its seeded development key. CI refuses to run with the capture-only fallback.
 
 Run `bun run typecheck` and `bun run check:manifest` for the remaining checks.
 

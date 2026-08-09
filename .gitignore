@@ -1,4 +1,5 @@
 node_modules/
+.hackatime/
 .output/
 .wxt/
 .env

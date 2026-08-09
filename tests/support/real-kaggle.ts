@@ -22,7 +22,6 @@ declare const chrome: {
 };
 
 const BRIDGE_EVENT = "kaggle-wakatime:activity";
-const TEST_KEY = "real-kaggle-browser-test-key";
 const EXPECTED_FIELDS = [
   "category", "cursorpos", "dependencies", "editor", "entity", "human_line_changes",
   "is_write", "language", "line_additions", "line_deletions", "lineno", "lines", "machine",
@@ -34,6 +33,7 @@ interface CapturedRequest {
   method?: string;
   headers: Record<string, string>;
   body: string;
+  response?: { status: number; body: string };
 }
 
 interface Heartbeat {
@@ -78,9 +78,9 @@ export interface RealKaggleResult {
   privacy: { sourceExcluded: boolean; keyExcluded: boolean };
 }
 
-interface CommandOptions { cookie: string; notebookUrl: string }
+interface CommandOptions { cookie: string; notebookUrl: string; hackatimeUrl?: string; apiKey: string; requireHackatime: boolean }
 
-async function startCaptureServer() {
+async function startHeartbeatProxy(hackatimeUrl?: string) {
   const directory = mkdtempSync(join(tmpdir(), "kaggle-wakatime-capture-"));
   const keyPath = join(directory, "key.pem"), certificatePath = join(directory, "certificate.pem");
   execFileSync("openssl", [
@@ -93,13 +93,40 @@ async function startCaptureServer() {
     request.setEncoding("utf8");
     request.on("data", chunk => { body += chunk; });
     request.on("end", () => {
-      requests.push({
+      const captured: CapturedRequest = {
         url: `https://${request.headers.host ?? "hackatime.hackclub.com"}${request.url ?? ""}`, method: request.method,
         headers: Object.fromEntries(Object.entries(request.headers).flatMap(([name, value]) => value === undefined ? [] : [[name, Array.isArray(value) ? value.join(", ") : value]])),
         body,
-      });
-      response.writeHead(202, { "Content-Type": "application/json" });
-      response.end("{}");
+      };
+      requests.push(captured);
+      if (!hackatimeUrl) {
+        captured.response = { status: 202, body: "{}" };
+        response.writeHead(202, { "Content-Type": "application/json" });
+        response.end("{}");
+        return;
+      }
+      void (async () => {
+        try {
+          const upstreamHeaders = new Headers();
+          for (const name of ["authorization", "content-type", "origin", "user-agent"]) {
+            const value = request.headers[name];
+            if (typeof value === "string") upstreamHeaders.set(name, value);
+          }
+          const upstream = await fetch(new URL(request.url ?? "/", hackatimeUrl), {
+            method: request.method,
+            headers: upstreamHeaders,
+            body: request.method === "GET" || request.method === "HEAD" ? undefined : body,
+          });
+          const responseBody = await upstream.text();
+          captured.response = { status: upstream.status, body: responseBody };
+          response.writeHead(upstream.status, { "Content-Type": upstream.headers.get("content-type") ?? "application/json" });
+          response.end(responseBody);
+        } catch {
+          captured.response = { status: 502, body: "" };
+          response.writeHead(502, { "Content-Type": "application/json" });
+          response.end('{"error":"Local Hackatime unavailable"}');
+        }
+      })();
     });
   });
   await new Promise<void>((resolve, reject) => {
@@ -109,12 +136,44 @@ async function startCaptureServer() {
   const address = server.address();
   requireCondition(address && typeof address === "object", "Could not start the local heartbeat capture server");
   return {
-    endpoint: `https://hackatime.hackclub.com:${address.port}/heartbeats`, requests,
+    endpoint: `https://hackatime.hackclub.com:${address.port}/api/hackatime/v1/users/current/heartbeats`, requests,
     async close() {
       await new Promise<void>(resolve => server.close(() => resolve()));
       rmSync(directory, { force: true, recursive: true });
     },
   };
+}
+
+async function verifyPersistedHeartbeat(hackatimeUrl: string, apiKey: string, request: CapturedRequest, expected: Heartbeat) {
+  requireCondition(request.response?.status === 202, `Local Hackatime returned HTTP ${request.response?.status ?? "error"}`);
+  let accepted: Record<string, unknown>;
+  try { accepted = JSON.parse(request.response.body) as Record<string, unknown>; } catch { throw new Error("Local Hackatime returned invalid heartbeat JSON"); }
+  requireCondition(typeof accepted.id === "number", "Local Hackatime did not return a persisted heartbeat ID");
+
+  const start = new Date((Number(expected.time) - 60) * 1000).toISOString();
+  const finish = new Date((Number(expected.time) + 60) * 1000).toISOString();
+  const url = new URL("/api/v1/my/heartbeats", hackatimeUrl);
+  url.searchParams.set("start_time", start);
+  url.searchParams.set("end_time", finish);
+  const response = await fetch(url, { headers: { Authorization: `Basic ${Buffer.from(apiKey).toString("base64")}` } });
+  requireCondition(response.ok, `Local Hackatime heartbeat lookup returned HTTP ${response.status}`);
+  const data = await response.json() as { heartbeats?: Record<string, unknown>[] };
+  const persisted = data.heartbeats?.find(heartbeat => heartbeat.id === accepted.id);
+  requireCondition(persisted, "Local Hackatime did not retain the accepted heartbeat");
+  for (const field of [
+    "category", "cursorpos", "dependencies", "editor", "entity", "human_line_changes", "is_write",
+    "language", "line_additions", "line_deletions", "lineno", "lines", "machine", "operating_system",
+    "project", "project_root_count", "time", "type", "user_agent",
+  ]) {
+    requireCondition(Object.hasOwn(accepted, field), `Local Hackatime response omitted heartbeat field ${field}`);
+    requireCondition(Object.hasOwn(persisted, field), `Local Hackatime lookup omitted heartbeat field ${field}`);
+    requireCondition(JSON.stringify(persisted[field]) === JSON.stringify(accepted[field]), `Local Hackatime did not retain heartbeat field ${field}`);
+    if (field === "editor" || field === "operating_system") {
+      requireCondition(typeof accepted[field] === "string" && accepted[field].length > 0, `Local Hackatime returned an empty heartbeat field ${field}`);
+    } else {
+      requireCondition(JSON.stringify(accepted[field]) === JSON.stringify(expected[field]), `Local Hackatime did not accept heartbeat field ${field}`);
+    }
+  }
 }
 
 function requireCondition(value: unknown, message: string): asserts value {
@@ -204,12 +263,13 @@ async function metadataMessage(worker: Worker, entity: string) {
 export function createRealKaggleCommand(options: CommandOptions): BrowserCommand<[], RealKaggleResult> {
   return async ({ provider, context }) => {
     requireCondition(provider.name === "playwright", "Real Kaggle tests require the Playwright browser provider");
+    requireCondition(!options.requireHackatime || options.hackatimeUrl, "CI requires HACKATIME_TEST_URL for a real local Hackatime integration");
     const identity = notebookIdentity(options.notebookUrl);
     const cookies = cookiesFromHeader(options.cookie);
     requireCondition(cookies.length > 0, "KAGGLE does not contain any browser cookies");
 
     const marker = `# KAGGLE_WAKATIME_BROWSER_TEST_${crypto.randomUUID()}`;
-    const capture = await startCaptureServer();
+    const capture = await startHeartbeatProxy(options.hackatimeUrl);
 
     const worker = await extensionWorker(context);
     const workerConsole: string[] = [];
@@ -260,7 +320,7 @@ export function createRealKaggleCommand(options: CommandOptions): BrowserCommand
       stage = "options page";
       optionsPage = await context.newPage();
       await optionsPage.goto(`chrome-extension://${extensionId}/options.html`);
-      await optionsPage.getByLabel("API key").fill(TEST_KEY);
+      await optionsPage.getByLabel("API key").fill(options.apiKey);
       await optionsPage.getByLabel("API endpoint").fill(capture.endpoint);
       await optionsPage.getByRole("button", { name: "Save and test" }).click();
       await optionsPage.waitForFunction(() => document.querySelector('[role="status"]')?.textContent?.includes("Connection test passed"));
@@ -268,7 +328,7 @@ export function createRealKaggleCommand(options: CommandOptions): BrowserCommand
       const testHeartbeat = payload(testRequest);
       requireCondition(Object.keys(testHeartbeat).sort().join(",") === EXPECTED_FIELDS.join(","), "Connection test heartbeat did not include the exact field set");
       requireCondition(/^Basic /.test(testRequest.headers.authorization ?? "") && testRequest.headers["content-type"] === "application/json", "Connection test heartbeat used the wrong authentication or content type");
-      requireCondition(!testRequest.body.includes(TEST_KEY), "Connection test heartbeat exposed the API key in its body");
+      requireCondition(!testRequest.body.includes(options.apiKey), "Connection test heartbeat exposed the API key in its body");
       capture.requests.length = 0;
 
       stage = "Kaggle notebook load";
@@ -281,13 +341,30 @@ export function createRealKaggleCommand(options: CommandOptions): BrowserCommand
       await notebookPage.waitForTimeout(12_000);
 
       frame = await kaggleFrame(notebookPage);
-      const editors = frame.locator(".cm-content");
+      let editors = frame.locator(".cm-content");
       await editors.first().waitFor({ state: "visible", timeout: 60_000 });
-      const baselineEditorCount = await editors.count();
-      const staleTestCells = (await Promise.all(Array.from({ length: baselineEditorCount }, (_, index) => editors.nth(index).innerText())))
+      let baselineEditorCount = await editors.count();
+      let staleTestCells = (await Promise.all(Array.from({ length: baselineEditorCount }, (_, index) => editors.nth(index).innerText())))
         .filter(source => source.includes("KAGGLE_WAKATIME_BROWSER_TEST")).length;
       requireCondition(baselineEditorCount === 1, `Real Kaggle test notebook must contain exactly one cell; found ${baselineEditorCount} with ${staleTestCells} stale test cells`);
       baselineSource = await waitFor(() => singleCellSource(frame!), "Could not read the exact baseline source from real Kaggle");
+      if (baselineSource.includes("KAGGLE_WAKATIME_BROWSER_TEST")) {
+        const staleSuffix = /\n# KAGGLE_WAKATIME_BROWSER_TEST_[0-9a-f-]+\nimport pandas as pd\nanswer = 42$/;
+        requireCondition(staleSuffix.test(baselineSource), "Real Kaggle test notebook contains test content that is unsafe to recover automatically");
+        baselineSource = baselineSource.replace(staleSuffix, "");
+        await editors.first().fill(baselineSource);
+        await editors.first().press("Control+s");
+        await notebookPage.waitForTimeout(30_000);
+        await notebookPage.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
+        await notebookPage.waitForTimeout(12_000);
+        frame = await kaggleFrame(notebookPage);
+        editors = frame.locator(".cm-content");
+        await editors.first().waitFor({ state: "visible", timeout: 60_000 });
+        baselineEditorCount = await editors.count();
+        staleTestCells = (await Promise.all(Array.from({ length: baselineEditorCount }, (_, index) => editors.nth(index).innerText())))
+          .filter(source => source.includes("KAGGLE_WAKATIME_BROWSER_TEST")).length;
+        requireCondition(baselineEditorCount === 1 && staleTestCells === 0 && await singleCellSource(frame) === baselineSource, "Real Kaggle test notebook recovery did not persist");
+      }
       requireCondition(!baselineSource.includes("KAGGLE_WAKATIME_BROWSER_TEST"), "Real Kaggle test notebook contains stale test content");
       await frame.evaluate(eventName => {
         const scope = globalThis as typeof globalThis & { __kaggleWakatimeBridge?: Record<string, unknown>[] };
@@ -338,6 +415,13 @@ export function createRealKaggleCommand(options: CommandOptions): BrowserCommand
         return [...activities].reverse().find(activity => activity.isWrite && activity.lines === lines);
       }, initial.lines), "MAIN world did not publish the initial real Kaggle activity");
       requireCondition(initialBridge.partial !== true && initial.lines === baselineSource.split("\n").length, "Real Kaggle test notebook baseline is not one complete cell");
+      const initialResponse = await waitFor(async () => initialRequest.response, "Initial heartbeat did not receive an HTTP response");
+      requireCondition(initialResponse.status === 202, `Initial heartbeat returned HTTP ${initialResponse.status}`);
+      await waitFor(async () => worker.evaluate(async entity => {
+        const status = (await chrome.storage.local.get("deliveryStatus")).deliveryStatus as { state?: unknown; entity?: unknown } | undefined;
+        const last = (await chrome.storage.session.get(`last:${entity}`))[`last:${entity}`];
+        return status?.state === "sent" && status.entity === entity && typeof last === "number" ? true : undefined;
+      }, identity.entity), "Initial heartbeat delivery did not finish");
 
       stage = "real Kaggle cell edit";
       const editStartedAt = Date.now();
@@ -361,7 +445,37 @@ export function createRealKaggleCommand(options: CommandOptions): BrowserCommand
       }, "Real Kaggle model did not accept the exact test mutation");
       await firstEditor.press("Control+End");
       const expectedLines = initial.lines + 3;
-      const editRequest = await waitForRequest(capture.requests, heartbeat => heartbeat.is_write && heartbeat.lines === expectedLines, "Installed extension did not send the real Kaggle edit heartbeat");
+      let editRequest: CapturedRequest;
+      try {
+        editRequest = await waitForRequest(capture.requests, heartbeat => heartbeat.is_write && heartbeat.lines === expectedLines, "Installed extension did not send the real Kaggle edit heartbeat");
+      } catch {
+        const bridge = await frame.evaluate(() => {
+          const activities = (globalThis as typeof globalThis & { __kaggleWakatimeBridge?: BridgeActivity[] }).__kaggleWakatimeBridge ?? [];
+          return activities.map(activity => ({ isWrite: activity.isWrite, lines: activity.lines, partial: activity.partial }));
+        });
+        const workerState = await worker.evaluate(async () => {
+          const scope = globalThis as typeof globalThis & { __kaggleWakatimeActivities?: ObservedActivity[] };
+          return {
+            activities: (scope.__kaggleWakatimeActivities ?? []).map(activity => ({
+              isWrite: activity.message.isWrite,
+              lines: activity.message.lines,
+              senderOrigin: activity.senderOrigin,
+              tabId: activity.tabId,
+            })),
+            deliveryStatus: (await chrome.storage.local.get("deliveryStatus")).deliveryStatus,
+            sessionKeys: Object.keys(await chrome.storage.session.get(null)),
+          };
+        });
+        const captured = capture.requests.map(request => {
+          try {
+            const heartbeat = payload(request);
+            return { entity: heartbeat.entity, isWrite: heartbeat.is_write, lines: heartbeat.lines, status: request.response?.status };
+          } catch {
+            return { invalidPayload: true, status: request.response?.status };
+          }
+        });
+        throw new Error(`Installed extension did not send the real Kaggle edit heartbeat; bridge ${JSON.stringify(bridge)}; worker ${JSON.stringify(workerState)}; captured ${JSON.stringify(captured)}; console ${JSON.stringify(workerConsole)}`);
+      }
       const edit = payload(editRequest);
       const bridgeActivity = await waitFor(async () => frame!.evaluate(lines => {
         const activities = (globalThis as typeof globalThis & { __kaggleWakatimeBridge?: BridgeActivity[] }).__kaggleWakatimeBridge ?? [];
@@ -379,6 +493,7 @@ export function createRealKaggleCommand(options: CommandOptions): BrowserCommand
         const status = document.querySelector<HTMLElement>("#delivery-status");
         return status?.dataset.state === "sent" && status.textContent?.includes("Heartbeat accepted for");
       });
+      if (options.hackatimeUrl) await verifyPersistedHeartbeat(options.hackatimeUrl, options.apiKey, editRequest, edit);
 
       capture.requests.length = 0;
       await firstEditor.press("Control+s");
@@ -414,7 +529,7 @@ export function createRealKaggleCommand(options: CommandOptions): BrowserCommand
         },
         privacy: {
           sourceExcluded: !editRequest.body.includes(marker),
-          keyExcluded: !editRequest.body.includes(TEST_KEY),
+          keyExcluded: !editRequest.body.includes(options.apiKey),
         },
       };
 
@@ -435,7 +550,7 @@ export function createRealKaggleCommand(options: CommandOptions): BrowserCommand
             );
             await editor.fill(baselineSource);
             await editor.press("Control+s");
-            await notebookPage.waitForTimeout(3_000);
+            await notebookPage.waitForTimeout(30_000);
           }
           await notebookPage.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
           await notebookPage.waitForTimeout(12_000);

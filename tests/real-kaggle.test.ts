@@ -8,11 +8,11 @@ declare module "vitest/browser" {
   }
 }
 
-test("runs the installed extension against real Kaggle", { timeout: 120_000 }, async () => {
+test("runs the installed extension against real Kaggle", { timeout: 300_000 }, async () => {
   const result = await commands.realKaggle();
   expect(result.request).toEqual({
     method: "POST",
-    url: expect.stringMatching(/^https:\/\/hackatime\.hackclub\.com:\d+\/heartbeats$/),
+    url: expect.stringMatching(/^https:\/\/hackatime\.hackclub\.com:\d+\/api\/hackatime\/v1\/users\/current\/heartbeats$/),
     basicAuth: true,
     jsonContentType: true,
     localEndpoint: true,
