@@ -7,10 +7,10 @@ A browser extension that records coding activity from Kaggle Notebooks and sends
 1. Run `bun install` then `bun run build`.
 2. Open the browser extension manager and enable developer mode.
 3. Choose Load unpacked and select `.output/chrome-mv3`.
-4. Open the extension options, enter your API key then save.
+4. Open the extension options, enter your API key then choose Save and test.
 5. Open a Kaggle notebook edit page.
 
-The API endpoint defaults to Hackatime. A compatible HTTPS WakaTime endpoint can be entered in options. Chrome asks for access to the selected endpoint when you save it. If permission is denied, the settings are not saved.
+The API endpoint defaults to Hackatime. A compatible HTTPS WakaTime endpoint can be entered in options. Chrome asks for access to the selected endpoint when you save it. If permission is denied, the settings are not saved. Delivery status shows whether Hackatime accepted the latest Kaggle heartbeat and identifies the notebook that sent it.
 
 ## Data and privacy
 

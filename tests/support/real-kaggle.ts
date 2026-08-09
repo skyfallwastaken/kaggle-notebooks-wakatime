@@ -63,12 +63,6 @@ interface ObservedActivity {
   tabId?: number;
 }
 
-interface WorkerFetchRecord {
-  body?: string;
-  method?: string;
-  url: string;
-}
-
 export interface RealKaggleResult {
   fields: string[];
   request: {
@@ -78,7 +72,7 @@ export interface RealKaggleResult {
   metadata: { entity: string; projectRootCount: number };
   position: { lines: number; lineno: number; cursorpos: number };
   activity: {
-    complete: boolean; isWrite: boolean; dependencies: boolean; forcedSave: boolean; outerMetadata: boolean; workerFetch: boolean; workerReceived: boolean;
+    complete: boolean; isWrite: boolean; dependencies: boolean; deliveryStatus: boolean; forcedSave: boolean; outerMetadata: boolean; workerReceived: boolean;
     lineAdditions: number; lineDeletions: number; humanLineChanges: number;
   };
   privacy: { sourceExcluded: boolean; keyExcluded: boolean };
@@ -241,26 +235,12 @@ export function createRealKaggleCommand(options: CommandOptions): BrowserCommand
         const scope = globalThis as typeof globalThis & {
           __kaggleWakatimeMetadata?: { message: unknown; senderUrl?: string }[];
           __kaggleWakatimeActivities?: ObservedActivity[];
-          __kaggleWakatimeFetches?: WorkerFetchRecord[];
-          __kaggleWakatimeOriginalFetch?: typeof fetch;
           __kaggleWakatimeMetadataListener?: ExtensionMessageListener;
         };
         await chrome.storage.local.clear();
         await chrome.storage.session.clear();
         scope.__kaggleWakatimeMetadata = [];
         scope.__kaggleWakatimeActivities = [];
-        scope.__kaggleWakatimeFetches = [];
-        scope.__kaggleWakatimeOriginalFetch = globalThis.fetch;
-        const originalFetch = globalThis.fetch.bind(globalThis);
-        globalThis.fetch = async (input, init) => {
-          const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-          scope.__kaggleWakatimeFetches!.push({
-            url,
-            method: init?.method,
-            body: typeof init?.body === "string" ? init.body : undefined,
-          });
-          return originalFetch(input, init);
-        };
         scope.__kaggleWakatimeMetadataListener = (message, sender) => {
           const value = message as { kind?: unknown };
           if (value?.kind === "metadata") {
@@ -282,22 +262,13 @@ export function createRealKaggleCommand(options: CommandOptions): BrowserCommand
       await optionsPage.goto(`chrome-extension://${extensionId}/options.html`);
       await optionsPage.getByLabel("API key").fill(TEST_KEY);
       await optionsPage.getByLabel("API endpoint").fill(capture.endpoint);
-      await optionsPage.getByRole("button", { name: "Save" }).click();
-      await optionsPage.waitForFunction(() => document.querySelector('[role="status"]')?.textContent?.trim());
-      requireCondition((await optionsPage.getByRole("status").innerText()).includes("Settings saved"), "Installed extension options did not save");
-      const captureProbe = await worker.evaluate(async endpoint => {
-        try {
-          return (await fetch(endpoint, {
-            method: "POST",
-            headers: { Authorization: "Basic capture-probe", "Content-Type": "application/json" },
-            body: "[]",
-          })).status;
-        } catch { return 0; }
-      }, capture.endpoint);
-      requireCondition(captureProbe === 202, `Extension could not reach the local heartbeat capture server; status ${captureProbe}`);
-      await worker.evaluate(() => {
-        (globalThis as typeof globalThis & { __kaggleWakatimeFetches?: WorkerFetchRecord[] }).__kaggleWakatimeFetches = [];
-      });
+      await optionsPage.getByRole("button", { name: "Save and test" }).click();
+      await optionsPage.waitForFunction(() => document.querySelector('[role="status"]')?.textContent?.includes("Connection test passed"));
+      const testRequest = await waitForRequest(capture.requests, heartbeat => heartbeat.entity === "test.txt", "Installed extension options did not send a test heartbeat");
+      const testHeartbeat = payload(testRequest);
+      requireCondition(Object.keys(testHeartbeat).sort().join(",") === EXPECTED_FIELDS.join(","), "Connection test heartbeat did not include the exact field set");
+      requireCondition(/^Basic /.test(testRequest.headers.authorization ?? "") && testRequest.headers["content-type"] === "application/json", "Connection test heartbeat used the wrong authentication or content type");
+      requireCondition(!testRequest.body.includes(TEST_KEY), "Connection test heartbeat exposed the API key in its body");
       capture.requests.length = 0;
 
       stage = "Kaggle notebook load";
@@ -329,6 +300,7 @@ export function createRealKaggleCommand(options: CommandOptions): BrowserCommand
       const firstEditor = editors.first();
       await worker.evaluate(async entity => {
         await chrome.storage.local.remove(`last:${entity}`);
+        await chrome.storage.local.remove("deliveryStatus");
         await chrome.storage.session.remove(`last:${entity}`);
       }, identity.entity);
       capture.requests.length = 0;
@@ -368,10 +340,13 @@ export function createRealKaggleCommand(options: CommandOptions): BrowserCommand
       requireCondition(initialBridge.partial !== true && initial.lines === baselineSource.split("\n").length, "Real Kaggle test notebook baseline is not one complete cell");
 
       stage = "real Kaggle cell edit";
-      await worker.evaluate(async entity => {
+      const editStartedAt = Date.now();
+      await worker.evaluate(async ({ entity, at }) => {
         await chrome.storage.local.remove(`last:${entity}`);
         await chrome.storage.session.remove(`last:${entity}`);
-      }, identity.entity);
+        await chrome.storage.local.set({ deliveryStatus: { state: "not_configured", message: "Waiting for the next Kaggle edit.", at, entity } });
+      }, { entity: identity.entity, at: editStartedAt });
+      await optionsPage.waitForFunction(() => document.querySelector("#delivery-status")?.textContent?.includes("Waiting for the next Kaggle edit."));
       capture.requests.length = 0;
       await frame.evaluate(() => {
         (globalThis as typeof globalThis & { __kaggleWakatimeBridge?: BridgeActivity[] }).__kaggleWakatimeBridge = [];
@@ -396,24 +371,24 @@ export function createRealKaggleCommand(options: CommandOptions): BrowserCommand
         const activities = (globalThis as typeof globalThis & { __kaggleWakatimeActivities?: ObservedActivity[] }).__kaggleWakatimeActivities ?? [];
         return [...activities].reverse().find(activity => activity.message.isWrite && activity.message.lines === lines);
       }, expectedLines), "Extension service worker did not receive the real Kaggle edit activity");
-      const editWorkerFetch = await waitFor(async () => worker.evaluate(expected => {
-        const fetches = (globalThis as typeof globalThis & { __kaggleWakatimeFetches?: WorkerFetchRecord[] }).__kaggleWakatimeFetches ?? [];
-        return fetches.find(request => request.url === expected.url && request.method === "POST" && request.body === expected.body);
-      }, { body: editRequest.body, url: capture.endpoint }), "Extension service worker did not make the captured edit request");
+      const editDeliveryStatus = await waitFor(async () => worker.evaluate(async expected => {
+        const status = (await chrome.storage.local.get("deliveryStatus")).deliveryStatus as { state?: unknown; entity?: unknown; at?: unknown } | undefined;
+        return status?.state === "sent" && status.entity === expected.entity && typeof status.at === "number" && status.at > expected.after ? true : undefined;
+      }, { entity: identity.entity, after: editStartedAt }), "Extension did not record the real Kaggle edit as delivered");
+      await optionsPage.waitForFunction(() => {
+        const status = document.querySelector<HTMLElement>("#delivery-status");
+        return status?.dataset.state === "sent" && status.textContent?.includes("Heartbeat accepted for");
+      });
 
       capture.requests.length = 0;
       await firstEditor.press("Control+s");
       const saveRequest = await waitForRequest(capture.requests, heartbeat => heartbeat.is_write && heartbeat.lines === expectedLines, "A real Kaggle save did not bypass heartbeat throttling");
       const save = payload(saveRequest);
-      const saveWorkerFetch = await waitFor(async () => worker.evaluate(expected => {
-        const fetches = (globalThis as typeof globalThis & { __kaggleWakatimeFetches?: WorkerFetchRecord[] }).__kaggleWakatimeFetches ?? [];
-        return fetches.find(request => request.url === expected.url && request.method === "POST" && request.body === expected.body);
-      }, { body: saveRequest.body, url: capture.endpoint }), "Extension service worker did not make the captured save request");
 
       const expectedDependencies = [...new Set([...initial.dependencies, "pandas"])].sort();
       requireCondition(edit.entity === identity.entity, "Real Kaggle edit heartbeat used the wrong entity");
       requireCondition(JSON.stringify(edit.dependencies) === JSON.stringify(expectedDependencies), "Real Kaggle edit heartbeat dependencies were incorrect");
-      requireCondition(edit.user_agent.startsWith("kaggle-wakatime/0.1.2 "), "Real Kaggle heartbeat used the wrong user agent prefix");
+      requireCondition(edit.user_agent.startsWith("kaggle-wakatime/0.1.3 "), "Real Kaggle heartbeat used the wrong user agent prefix");
 
       result = {
         fields: Object.keys(edit).sort(),
@@ -429,9 +404,9 @@ export function createRealKaggleCommand(options: CommandOptions): BrowserCommand
           complete: bridgeActivity.partial !== true,
           isWrite: edit.is_write,
           dependencies: true,
+          deliveryStatus: editDeliveryStatus,
           forcedSave: save.is_write,
           outerMetadata: true,
-          workerFetch: Boolean(editWorkerFetch && saveWorkerFetch),
           workerReceived: Boolean(workerActivity),
           lineAdditions: edit.line_additions,
           lineDeletions: edit.line_deletions,
@@ -485,16 +460,11 @@ export function createRealKaggleCommand(options: CommandOptions): BrowserCommand
         const scope = globalThis as typeof globalThis & {
           __kaggleWakatimeMetadata?: unknown[];
           __kaggleWakatimeActivities?: unknown[];
-          __kaggleWakatimeFetches?: unknown[];
-          __kaggleWakatimeOriginalFetch?: typeof fetch;
           __kaggleWakatimeMetadataListener?: ExtensionMessageListener;
         };
         if (scope.__kaggleWakatimeMetadataListener) chrome.runtime.onMessage.removeListener(scope.__kaggleWakatimeMetadataListener);
-        if (scope.__kaggleWakatimeOriginalFetch) globalThis.fetch = scope.__kaggleWakatimeOriginalFetch;
         delete scope.__kaggleWakatimeMetadata;
         delete scope.__kaggleWakatimeActivities;
-        delete scope.__kaggleWakatimeFetches;
-        delete scope.__kaggleWakatimeOriginalFetch;
         delete scope.__kaggleWakatimeMetadataListener;
         await chrome.storage.local.clear();
         await chrome.storage.session.clear();

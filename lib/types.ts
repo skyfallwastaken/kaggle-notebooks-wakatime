@@ -1,6 +1,16 @@
 export interface NotebookMetadata { owner: string; slug: string; title: string; entity: string; project: string }
 export interface Activity { kind: "activity"; lines: number; lineno: number; cursorpos: number; language: string; dependencies: string[]; isWrite: boolean; force: boolean; lineAdditions: number; lineDeletions: number; humanLineChanges: number; partial?: boolean }
 export type ExtensionMessage = { kind: "metadata"; metadata: NotebookMetadata } | Activity;
+export interface DeliveryStatus { state: "sent" | "failed" | "not_configured"; message: string; at: number; entity?: string }
+
+export function validDeliveryStatus(value: unknown): value is DeliveryStatus {
+  if (!value || typeof value !== "object") return false;
+  const status = value as Record<string, unknown>;
+  return ["sent", "failed", "not_configured"].includes(String(status.state)) &&
+    typeof status.message === "string" && status.message.length > 0 && status.message.length < 1000 &&
+    typeof status.at === "number" && Number.isFinite(status.at) &&
+    (status.entity === undefined || typeof status.entity === "string");
+}
 
 export function validActivity(value: unknown): value is Activity {
   if (!value || typeof value !== "object") return false;

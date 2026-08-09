@@ -5,7 +5,15 @@ h1 { color: #bd93f9; margin-top: 0; }
 form { display: grid; gap: .75rem; }
 label { color: #8be9fd; font-weight: 650; }
 input, button { border: 1px solid #6272a4; border-radius: 0; background: #44475a; color: #f8f8f2; font: inherit; padding: .7rem; background-image: none; }
-button { background: #50fa7b; color: #282a36; cursor: pointer; font-weight: 700; margin-top: .5rem; }
+button { background: #50fa7b; color: #282a36; cursor: pointer; font-weight: 700; }
+button:disabled { cursor: wait; opacity: .65; }
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-top: .5rem; }
+#test-connection { background: #8be9fd; }
 input:focus, button:focus-visible { outline: 3px solid #ff79c6; outline-offset: 2px; }
 #status { min-height: 1.5em; color: #50fa7b; margin-bottom: 0; }
+.delivery { border-top: 1px solid #6272a4; margin-top: 1.25rem; padding-top: 1.25rem; }
+.delivery h2 { color: #bd93f9; font-size: 1.1rem; margin: 0 0 .5rem; }
+#delivery-status { margin: 0; color: #f8f8f2; overflow-wrap: anywhere; }
+#delivery-status[data-state="sent"] { color: #50fa7b; }
+#delivery-status[data-state="failed"], #delivery-status[data-state="not_configured"] { color: #ffb86c; }
 @media (max-height: 36rem) { main { margin: 1.5rem auto; padding: 1.5rem; } }

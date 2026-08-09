@@ -1,8 +1,8 @@
 import { describe, expect, test, vi } from "vitest";
-import { createMachineGetter, createMessageHandler } from "../lib/background";
+import { createMachineGetter, createMessageHandler, deliverActivity } from "../lib/background";
 import { BRIDGE_EVENT, installBridgeRelay } from "../lib/bridge";
 import { parseKaggle } from "../lib/kaggle";
-import { decodeBridgeDetail } from "../lib/types";
+import { decodeBridgeDetail, validDeliveryStatus } from "../lib/types";
 
 const activity = { kind: "activity" as const, lines: 1, lineno: 1, cursorpos: 1, language: "Python", dependencies: [], isWrite: false, force: false, lineAdditions: 0, lineDeletions: 0, humanLineChanges: 0 };
 const metadata = (owner: string) => ({ owner, slug: "book", title: owner, entity: `/${owner}`, project: owner });
@@ -49,5 +49,40 @@ describe("privacy and routing", () => {
       "kaggle-uuid", "kaggle-uuid", "kaggle-uuid",
     ]);
     expect(set).toHaveBeenCalledOnce();
+  });
+  test("records that an API key is missing without attempting delivery", async () => {
+    const store = vi.fn(), send = vi.fn();
+    await deliverActivity(metadata("one"), {
+      getSettings: async () => ({ apiKey: "  ", endpoint: "https://example.com/heartbeats" }),
+      send, store, failureMessage: () => "failure", now: () => 100,
+    });
+    expect(send).not.toHaveBeenCalled();
+    expect(store).toHaveBeenCalledWith({ state: "not_configured", message: "Add and save a Hackatime API key.", at: 100, entity: "/one" });
+  });
+  test("records accepted real activity with trimmed settings", async () => {
+    const store = vi.fn(), send = vi.fn(async () => true);
+    await deliverActivity(metadata("one"), {
+      getSettings: async () => ({ apiKey: "  key  ", endpoint: "  https://example.com/heartbeats  " }),
+      send, store, failureMessage: () => "failure", now: () => 200,
+    });
+    expect(send).toHaveBeenCalledWith({ apiKey: "key", endpoint: "https://example.com/heartbeats" });
+    expect(store).toHaveBeenCalledWith({ state: "sent", message: "Heartbeat accepted for one.", at: 200, entity: "/one" });
+  });
+  test("records safe delivery failures without rejecting the message handler", async () => {
+    const store = vi.fn();
+    await expect(deliverActivity(metadata("one"), {
+      getSettings: async () => ({ apiKey: "key", endpoint: "https://example.com/heartbeats" }),
+      send: async () => { throw new Error("secret internals"); },
+      store, failureMessage: () => "The heartbeat endpoint could not be reached.", now: () => 300,
+    })).resolves.toBeUndefined();
+    expect(store).toHaveBeenCalledWith({ state: "failed", message: "The heartbeat endpoint could not be reached.", at: 300, entity: "/one" });
+    expect(JSON.stringify(store.mock.calls)).not.toContain("secret internals");
+  });
+  test("accepts only safe complete stored delivery status", () => {
+    expect(validDeliveryStatus({ state: "sent", message: "Accepted", at: 100, entity: "/one" })).toBe(true);
+    expect(validDeliveryStatus({ state: "unknown", message: "Accepted", at: 100 })).toBe(false);
+    expect(validDeliveryStatus({ state: "failed", message: "", at: 100 })).toBe(false);
+    expect(validDeliveryStatus({ state: "failed", message: "Failed", at: "now" })).toBe(false);
+    expect(validDeliveryStatus({ state: "failed", message: "Failed", at: 100, entity: 42 })).toBe(false);
   });
 });

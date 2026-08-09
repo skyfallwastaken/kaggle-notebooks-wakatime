@@ -45,9 +45,9 @@ Certify all of the following:
 
 ## Privacy policy
 
-After `v0.1.2` is pushed, use this public URL in the privacy policy field:
+After `v0.1.3` is pushed, use this public URL in the privacy policy field:
 
-`https://github.com/skyfallwastaken/kaggle-notebooks-wakatime/blob/v0.1.2/PRIVACY.md`
+`https://github.com/skyfallwastaken/kaggle-notebooks-wakatime/blob/v0.1.3/PRIVACY.md`
 
 ## Store listing copy
 

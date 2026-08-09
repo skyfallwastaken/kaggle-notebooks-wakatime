@@ -1,5 +1,5 @@
 import { parseKaggle } from "./kaggle";
-import { validActivity, validMetadata, type ExtensionMessage, type NotebookMetadata } from "./types";
+import { validActivity, validMetadata, type DeliveryStatus, type ExtensionMessage, type NotebookMetadata } from "./types";
 
 export interface MetadataStore {
   get(key: string): Promise<unknown>;
@@ -9,6 +9,29 @@ export interface MetadataStore {
 export interface MachineStore {
   get(): Promise<unknown>;
   set(value: string): Promise<void>;
+}
+
+export interface DeliveryBoundaries {
+  getSettings(): Promise<{ apiKey: string; endpoint: string }>;
+  send(settings: { apiKey: string; endpoint: string }): Promise<boolean>;
+  store(status: DeliveryStatus): Promise<void>;
+  failureMessage(error: unknown): string;
+  now(): number;
+}
+
+export async function deliverActivity(metadata: NotebookMetadata, boundaries: DeliveryBoundaries) {
+  const settings = await boundaries.getSettings();
+  const apiKey = settings.apiKey.trim();
+  if (!apiKey) {
+    await boundaries.store({ state: "not_configured", message: "Add and save a Hackatime API key.", at: boundaries.now(), entity: metadata.entity });
+    return;
+  }
+  try {
+    const sent = await boundaries.send({ apiKey, endpoint: settings.endpoint.trim() });
+    if (sent) await boundaries.store({ state: "sent", message: `Heartbeat accepted for ${metadata.project}.`, at: boundaries.now(), entity: metadata.entity });
+  } catch (error) {
+    await boundaries.store({ state: "failed", message: boundaries.failureMessage(error), at: boundaries.now(), entity: metadata.entity });
+  }
 }
 
 export function createMachineGetter(
