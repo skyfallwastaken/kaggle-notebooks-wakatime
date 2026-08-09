@@ -33,6 +33,7 @@ assert(jupyter.some(s => s.world === "MAIN") && jupyter.some(s => !s.world || s.
 for (const host of ["https://hackatime.hackclub.com/*", "https://api.wakatime.com/*"]) assert(manifest.host_permissions.includes(host));
 assert(fs.readdirSync(".output/chrome-mv3/assets").some(file => file.startsWith("spline-sans-") && file.endsWith(".woff2")));
 assertPng("store-assets/icon-128.png", 128, 128, 6);
+assertPng("store-assets/screenshot-working-1280x800.png", 1280, 800);
 assertPng("store-assets/screenshot-settings-1280x800.png", 1280, 800);
 assertPng("store-assets/screenshot-kaggle-1280x800.png", 1280, 800);
 assertPng("store-assets/small-promo-440x280.png", 440, 280);

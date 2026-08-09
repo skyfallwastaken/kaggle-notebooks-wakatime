@@ -68,6 +68,7 @@ jobs:
               Path("PRIVACY.md"),
               Path("store-assets/CWS_SUBMISSION.md"),
               Path("store-assets/icon-128.png"),
+              Path("store-assets/screenshot-working-1280x800.png"),
               Path("store-assets/screenshot-settings-1280x800.png"),
               Path("store-assets/screenshot-kaggle-1280x800.png"),
               Path("store-assets/small-promo-440x280.png"),

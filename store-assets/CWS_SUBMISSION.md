@@ -68,10 +68,11 @@ Suggested category: **Developer Tools**.
 ## Graphics to upload
 
 - `icon-128.png` as the store icon if the dashboard asks for it separately
+- `screenshot-working-1280x800.png` as the primary screenshot
 - `screenshot-settings-1280x800.png`
 - `screenshot-kaggle-1280x800.png`
 - `small-promo-440x280.png`
 
-The settings screenshot uses the current packaged extension and a masked preview key. The Kaggle screenshot uses a real authenticated notebook with no identity or cookie visible. No Kaggle cookie is visible in either image.
+The primary screenshot combines a real authenticated Kaggle notebook with metrics from its captured heartbeat. The results panel is clearly labelled as captured data and is not presented as injected extension UI. The settings screenshot uses the current packaged extension and a masked preview key. No Kaggle cookie, API key or identity is visible in any image.
 
 Official image requirements: <https://developer.chrome.com/docs/webstore/images>
