@@ -13,7 +13,7 @@ const manifest = JSON.parse(fs.readFileSync(".output/chrome-mv3/manifest.json", 
 assert.equal(manifest.manifest_version, 3);
 assert.equal(manifest.name, "Hackatime for Kaggle Notebooks");
 assert(manifest.permissions.includes("storage"));
-assert.equal(manifest.version, "0.1.3");
+assert.equal(manifest.version, "0.1.4");
 assert.deepEqual(manifest.icons, {
   16: "icon/16.png",
   32: "icon/32.png",

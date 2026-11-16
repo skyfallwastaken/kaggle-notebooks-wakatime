@@ -1,4 +1,4 @@
-import { parseKaggle } from "./kaggle";
+import { hasNotebookTitle, parseKaggle } from "./kaggle";
 import { validActivity, validMetadata, type DeliveryStatus, type ExtensionMessage, type NotebookMetadata } from "./types";
 
 export interface MetadataStore {
@@ -69,11 +69,15 @@ export function createMessageHandler(store: MetadataStore, send: (metadata: Note
     const stored = await store.get(key);
     let metadata: unknown = stored;
     if (sender.tab?.url) {
-      const current = parseKaggle(sender.tab.url, sender.tab.title ?? "");
+      const tabTitle = sender.tab.title ?? "";
+      const current = parseKaggle(sender.tab.url, tabTitle);
       if (!current) return;
-      if (!validMetadata(stored) || stored.entity !== current.entity) {
+      const sameNotebook = validMetadata(stored) && stored.entity === current.entity;
+      // The live tab title is the freshest source of the notebook name. Only keep
+      // stored metadata when the tab still shows Kaggle's loading placeholder.
+      if (!sameNotebook || hasNotebookTitle(tabTitle)) {
         metadata = current;
-        await store.set(key, current);
+        if (JSON.stringify(stored) !== JSON.stringify(current)) await store.set(key, current);
       }
     }
     if (validMetadata(metadata)) await send(metadata, message);

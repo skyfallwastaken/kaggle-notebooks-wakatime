@@ -41,6 +41,30 @@ describe("privacy and routing", () => {
     await handler(activity, { tab: { id: 1, url: "https://www.kaggle.com/code/new-owner/new-book/edit", title: "New Book | Kaggle" } });
     expect(send.mock.calls[0]![0]).toMatchObject({ owner: "new-owner", project: "New Book" });
   });
+  test("never uses Kaggle's loading placeholder as the project", () => {
+    for (const title of ["Kaggle Notebook Editor", "Kaggle: Your Home for Data Science", "", " | Kaggle"]) {
+      expect(parseKaggle("https://www.kaggle.com/code/alice/my-book/edit", title)).toMatchObject({ project: "my-book", title: "my-book" });
+    }
+  });
+  test("replaces placeholder metadata once the notebook title loads", async () => {
+    const map = new Map<string, unknown>(), send = vi.fn();
+    const handler = createMessageHandler({ get: async key => map.get(key), set: async (key, value) => { map.set(key, value); } }, send);
+    const url = "https://www.kaggle.com/code/alice/my-book/edit";
+    // No top-frame content script (e.g. in-app navigation from /work/code): first activity sees the placeholder.
+    await handler(activity, { tab: { id: 1, url, title: "Kaggle Notebook Editor" } });
+    await handler(activity, { tab: { id: 1, url, title: "My Book | Kaggle" } });
+    // A placeholder seen later must not clobber the real title.
+    await handler(activity, { tab: { id: 1, url, title: "Kaggle Notebook Editor" } });
+    expect(send.mock.calls.map(call => call[0].project)).toEqual(["my-book", "My Book", "My Book"]);
+  });
+  test("prefers the live tab title over stale content-script metadata", async () => {
+    const map = new Map<string, unknown>(), send = vi.fn();
+    const handler = createMessageHandler({ get: async key => map.get(key), set: async (key, value) => { map.set(key, value); } }, send);
+    const url = "https://www.kaggle.com/code/alice/my-book/edit";
+    await handler({ kind: "metadata", metadata: parseKaggle(url, "Old Name | Kaggle") }, { tab: { id: 1 } });
+    await handler(activity, { tab: { id: 1, url, title: "Renamed | Kaggle" } });
+    expect(send.mock.calls[0]![0]).toMatchObject({ project: "Renamed" });
+  });
   test("initializes one stable machine for concurrent callers", async () => {
     let stored: string | undefined;
     const set = vi.fn(async (value: string) => { await Promise.resolve(); stored = value; });
