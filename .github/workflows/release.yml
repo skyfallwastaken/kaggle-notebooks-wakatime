@@ -74,6 +74,7 @@ jobs:
       - name: Test real Kaggle against local Hackatime
         env:
           KAGGLE: ${{ secrets.KAGGLE }}
+          KAGGLE_NOTEBOOK_URL: ${{ vars.KAGGLE_NOTEBOOK_URL }}
           HACKATIME_TEST_URL: http://localhost:3100
           HACKATIME_TEST_API_KEY: dev-api-key-12345
         run: bun run test
